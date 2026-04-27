@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
   controller: 'fast-pace-monopoly-controller-session'
 };
 
+const CONFIGURED_WS_URL = import.meta.env.VITE_WS_URL?.trim() || '';
+
 const socket = ref(null);
 const room = ref(null);
 const playerId = ref('');
@@ -25,11 +27,37 @@ const mode = ref(routeMode(window.location.pathname));
 
 function defaultWsUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${protocol}://${window.location.hostname}:8080`;
+
+  if (CONFIGURED_WS_URL) {
+    return CONFIGURED_WS_URL;
+  }
+
+  if (isLocalHost(window.location.hostname)) {
+    return `${protocol}://${window.location.hostname}:8080`;
+  }
+
+  return `${protocol}://${window.location.host}`;
+}
+
+function isLocalHost(hostname) {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function isLegacyHostedDefault(value) {
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return value === `${protocol}://${window.location.hostname}:8080` && !isLocalHost(window.location.hostname);
 }
 
 function loadWsUrl() {
-  return window.localStorage.getItem(STORAGE_KEYS.wsUrl) || defaultWsUrl();
+  const savedWsUrl = window.localStorage.getItem(STORAGE_KEYS.wsUrl);
+
+  if (savedWsUrl && !(CONFIGURED_WS_URL && isLegacyHostedDefault(savedWsUrl))) {
+    return savedWsUrl;
+  }
+
+  const nextDefault = defaultWsUrl();
+  window.localStorage.setItem(STORAGE_KEYS.wsUrl, nextDefault);
+  return nextDefault;
 }
 
 function routeMode(pathname) {
@@ -110,6 +138,13 @@ function connect(nextMode) {
   status.value = 'Connecting...';
   error.value = '';
   resetRoomState();
+
+  if (!wsUrl.value) {
+    status.value = 'Disconnected';
+    error.value =
+      'WebSocket URL is not configured. Set VITE_WS_URL for production deployments or run the Node server on the same origin.';
+    return;
+  }
 
   const connection = new WebSocket(wsUrl.value);
   socket.value = connection;
@@ -201,7 +236,8 @@ function connect(nextMode) {
   });
 
   connection.addEventListener('error', () => {
-    error.value = 'WebSocket connection failed. Check that the server is running.';
+    error.value =
+      'WebSocket connection failed. On Vercel, set VITE_WS_URL to your deployed backend or host the Node server on a platform with persistent WebSocket support.';
   });
 }
 

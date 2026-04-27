@@ -9,8 +9,6 @@ const ROUTES = {
   controller: '/controller'
 };
 
-const HOST_SECRET_CODE = 'DAVE';
-
 const STORAGE_KEYS = {
   wsUrl: 'fast-pace-monopoly-ws-url',
   host: 'fast-pace-monopoly-host-session',
@@ -98,8 +96,8 @@ function normalizedHostAccessCode() {
   return hostAccessCode.value.trim().toUpperCase();
 }
 
-function hasValidHostAccessCode() {
-  return normalizedHostAccessCode() === HOST_SECRET_CODE;
+function hasPendingHostAccessCode() {
+  return Boolean(normalizedHostAccessCode());
 }
 
 function canResumeHostSession() {
@@ -220,7 +218,18 @@ function connect(nextMode) {
   });
 
   connection.addEventListener('message', (event) => {
-    const payload = JSON.parse(event.data);
+    if (socket.value !== connection) {
+      return;
+    }
+
+    let payload;
+
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      error.value = 'Received an invalid message from the server.';
+      return;
+    }
 
     if (payload.type === 'room_created' || payload.type === 'host_reconnected') {
       room.value = payload.room;
@@ -254,18 +263,27 @@ function connect(nextMode) {
           playerId.value = '';
         }
       }
+
+      if (nextMode === 'host' && /invalid host access code/i.test(payload.message)) {
+        redirectHostToLanding(payload.message);
+      }
     }
   });
 
   connection.addEventListener('close', () => {
-    if (socket.value === connection) {
-      socket.value = null;
+    if (socket.value !== connection) {
+      return;
     }
 
+    socket.value = null;
     status.value = 'Disconnected';
   });
 
   connection.addEventListener('error', () => {
+    if (socket.value !== connection) {
+      return;
+    }
+
     error.value =
       'WebSocket connection failed. On Vercel, set VITE_WS_URL to your deployed backend or host the Node server on a platform with persistent WebSocket support.';
   });
@@ -304,11 +322,6 @@ function createHost() {
     return;
   }
 
-  if (normalizedCode !== HOST_SECRET_CODE) {
-    hostAccessError.value = 'That host access code is not valid.';
-    return;
-  }
-
   hostAccessError.value = '';
   hostAccessCode.value = normalizedCode;
   clearSession(STORAGE_KEYS.host);
@@ -335,7 +348,7 @@ function leaveSession() {
 function handlePopState() {
   const nextMode = routeMode(window.location.pathname);
 
-  if (nextMode === 'host' && !canResumeHostSession() && !hasValidHostAccessCode()) {
+  if (nextMode === 'host' && !canResumeHostSession() && !hasPendingHostAccessCode()) {
     redirectHostToLanding('Enter the host access code before opening the trading floor.');
     return;
   }
@@ -374,7 +387,7 @@ watchEffect(() => {
 onMounted(() => {
   window.addEventListener('popstate', handlePopState);
 
-  if (mode.value === 'host' && !canResumeHostSession() && !hasValidHostAccessCode()) {
+  if (mode.value === 'host' && !canResumeHostSession() && !hasPendingHostAccessCode()) {
     redirectHostToLanding();
     return;
   }
@@ -454,7 +467,6 @@ onBeforeUnmount(() => {
         :room="room"
         :player="activePlayer"
         @join-room="send($event)"
-        @toggle-ready="send({ type: 'toggle_ready' })"
         @roll="send({ type: 'roll' })"
         @buy-property="send({ type: 'buy_property' })"
         @skip-buy="send({ type: 'skip_buy' })"

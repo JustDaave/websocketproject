@@ -77,7 +77,7 @@ function boardCellStyle(index) {
 function boardStyle() {
   return {
     gridTemplateColumns: `repeat(${boardSideLength.value}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${boardSideLength.value}, minmax(120px, 1fr))`
+    gridTemplateRows: `repeat(${boardSideLength.value}, minmax(140px, 1fr))`
   };
 }
 
@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
               </p>
             </div>
             <span :class="['status-chip', { active: room?.turnPlayerId === player.id, offline: !player.connected, bankrupt: player.bankrupt }]">
-              {{ player.bankrupt ? 'Bankrupt' : room?.turnPlayerId === player.id ? 'Turn' : player.ready ? 'Ready' : player.connected ? 'Waiting' : 'Offline' }}
+              {{ player.bankrupt ? 'Bankrupt' : room?.turnPlayerId === player.id ? 'Turn' : player.connected ? 'Waiting' : 'Offline' }}
             </span>
           </li>
         </ul>

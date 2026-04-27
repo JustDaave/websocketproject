@@ -171,7 +171,7 @@ function scheduleRoomCleanup(room) {
     }
 
     currentRoom.clients.forEach((client) => {
-      if (client.socket?.readyState === client.socket.OPEN) {
+      if (isSocketOpen(client.socket)) {
         send(client.socket, 'error', { message: 'Host did not reconnect. Room closed.' });
         client.socket.close();
       }
@@ -236,8 +236,12 @@ function pushLog(room, message) {
   });
 }
 
+function isSocketOpen(socket) {
+  return socket?.readyState === 1;
+}
+
 function send(socket, type, data = {}) {
-  if (socket?.readyState === socket.OPEN) {
+  if (isSocketOpen(socket)) {
     socket.send(JSON.stringify({ type, ...data }));
   }
 }
@@ -248,12 +252,12 @@ function broadcastRoom(room) {
     room: serializeRoom(room)
   });
 
-  if (room.host.socket?.readyState === room.host.socket.OPEN) {
+  if (isSocketOpen(room.host.socket)) {
     room.host.socket.send(payload);
   }
 
   room.clients.forEach((client) => {
-    if (client.socket?.readyState === client.socket.OPEN) {
+    if (isSocketOpen(client.socket)) {
       client.socket.send(payload);
     }
   });
@@ -603,11 +607,6 @@ function startGame(room) {
     return { ok: false, message: 'Need at least 2 players to start.' };
   }
 
-  const waitingPlayers = room.players.filter((player) => !player.ready);
-  if (waitingPlayers.length > 0) {
-    return { ok: false, message: 'All players must be ready before the game starts.' };
-  }
-
   room.phase = 'rolling';
   room.turnPlayerId = null;
   room.winnerId = null;
@@ -920,26 +919,6 @@ wss.on('connection', (socket) => {
       if (!result.ok) {
         send(socket, 'error', { message: result.message });
       }
-      return;
-    }
-
-    if (message.type === 'toggle_ready') {
-      if (room.phase !== 'lobby') {
-        send(socket, 'error', { message: 'Ready state is only available in the lobby.' });
-        return;
-      }
-
-      const client = getClientBySocket(room, socket);
-      const player = room.players.find((entry) => entry.id === client?.playerId);
-
-      if (!player) {
-        send(socket, 'error', { message: 'Player not found.' });
-        return;
-      }
-
-      player.ready = !player.ready;
-      pushLog(room, `${player.name} is ${player.ready ? 'ready' : 'not ready'}.`);
-      broadcastRoom(room);
       return;
     }
 

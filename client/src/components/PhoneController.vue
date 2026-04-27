@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
   room: {
@@ -12,12 +12,15 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['join-room', 'toggle-ready', 'roll', 'buy-property', 'skip-buy', 'end-turn']);
+const emit = defineEmits(['join-room', 'roll', 'buy-property', 'skip-buy', 'end-turn']);
 
 const code = ref('');
 const name = ref('');
 const now = ref(Date.now());
+const animatedRoll = ref(null);
+const isDiceAnimating = ref(false);
 let timerId = null;
+let animationTimeoutId = null;
 
 const canJoin = computed(() => code.value.trim() && name.value.trim());
 const isMyTurn = computed(() => props.room?.turnPlayerId === props.player?.id);
@@ -27,6 +30,18 @@ const isResolving = computed(() => props.room?.phase === 'resolving');
 const winner = computed(() => props.room?.players?.find((entry) => entry.id === props.room?.winnerId) ?? null);
 const currentSpace = computed(() => props.room?.board?.[props.player?.position] ?? null);
 const pendingAction = computed(() => props.room?.pendingAction ?? null);
+const dicePips = computed(() => {
+  const patterns = {
+    1: [4],
+    2: [0, 8],
+    3: [0, 4, 8],
+    4: [0, 2, 6, 8],
+    5: [0, 2, 4, 6, 8],
+    6: [0, 2, 3, 5, 6, 8]
+  };
+
+  return patterns[animatedRoll.value?.value] ?? [];
+});
 const ownedProperties = computed(() => {
   if (!props.room?.board || !props.player?.ownedSpaceIds?.length) {
     return [];
@@ -63,11 +78,46 @@ const statusText = computed(() => {
   }
 
   if (props.room?.phase === 'lobby') {
-    return 'Signal that you are ready and wait for the opening bell.';
+    return 'Wait for the host to ring the opening bell.';
   }
 
   return 'Hold position until the market rotates back to you.';
 });
+
+function showRollAnimation(player) {
+  if (animationTimeoutId) {
+    window.clearTimeout(animationTimeoutId);
+  }
+
+  animatedRoll.value = {
+    playerId: player.id,
+    playerName: player.name,
+    value: player.lastRoll
+  };
+  isDiceAnimating.value = true;
+
+  animationTimeoutId = window.setTimeout(() => {
+    isDiceAnimating.value = false;
+  }, 1400);
+}
+
+watch(
+  () => props.room?.players?.map((entry) => ({ id: entry.id, name: entry.name, lastRoll: entry.lastRoll })) ?? [],
+  (players, previousPlayers) => {
+    if (!previousPlayers.length) {
+      return;
+    }
+
+    const previousRolls = new Map(previousPlayers.map((entry) => [entry.id, entry.lastRoll]));
+    const rolledPlayer = players.find(
+      (entry) => typeof entry.lastRoll === 'number' && previousRolls.get(entry.id) !== entry.lastRoll
+    );
+
+    if (rolledPlayer) {
+      showRollAnimation(rolledPlayer);
+    }
+  }
+);
 
 function joinRoom() {
   emit('join-room', {
@@ -85,6 +135,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.clearInterval(timerId);
+
+  if (animationTimeoutId) {
+    window.clearTimeout(animationTimeoutId);
+  }
 });
 </script>
 
@@ -113,16 +167,6 @@ onBeforeUnmount(() => {
         <p v-if="player.jailTurns > 0">Lockup turns remaining: {{ player.jailTurns }}</p>
       </section>
 
-      <section class="panel controller-panel" v-if="room?.phase === 'lobby'">
-        <div class="section-head">
-          <h3>Desk Actions</h3>
-          <span>{{ room?.phase }}</span>
-        </div>
-        <button class="secondary" @click="$emit('toggle-ready')">
-          {{ player.ready ? 'Stand Down' : 'Signal Ready' }}
-        </button>
-      </section>
-
       <section class="panel controller-panel action-grid">
         <button class="primary big-button" :disabled="!isMyTurn || !isRolling || player.lastRoll !== null || player.bankrupt" @click="$emit('roll')">
           Roll The Dice
@@ -136,6 +180,34 @@ onBeforeUnmount(() => {
         <button class="secondary big-button" :disabled="!isMyTurn || !isResolving || player.bankrupt" @click="$emit('end-turn')">
           Close Turn
         </button>
+      </section>
+
+      <section class="panel controller-panel dice-panel" :class="{ rolling: isDiceAnimating }">
+        <div class="section-head">
+          <h3>Dice Desk</h3>
+          <span>{{ animatedRoll ? `${animatedRoll.value}` : 'Standby' }}</span>
+        </div>
+
+        <div class="dice-stage">
+          <div class="die-face" :class="{ shaking: isDiceAnimating }" :aria-label="animatedRoll ? `Rolled ${animatedRoll.value}` : 'Waiting for a roll'">
+            <span
+              v-for="pipIndex in 9"
+              :key="pipIndex"
+              :class="['pip', { active: dicePips.includes(pipIndex - 1) }]"
+            />
+          </div>
+
+          <div class="dice-copy">
+            <p v-if="animatedRoll">
+              <strong>{{ animatedRoll.playerName }}</strong>
+              rolled a {{ animatedRoll.value }}.
+            </p>
+            <p v-else>Roll activity shows up here as soon as the market opens.</p>
+            <p class="dice-subtext">
+              {{ isDiceAnimating ? 'Dice on the table.' : 'Live roll feed across every trader desk.' }}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section class="panel controller-panel">

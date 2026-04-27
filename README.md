@@ -1,4 +1,4 @@
-# Wolf of Boardwalk
+# Wolf of Boardwalk Game
 
 This is a real-time multiplayer board game with a luxury finance aesthetic inspired by high-pressure trading floors and boardwalk property wars.
 

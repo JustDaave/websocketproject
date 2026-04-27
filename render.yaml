@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: wolf-of-boardwalk-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start --workspace server
+    envVars:
+      - key: NODE_VERSION
+        value: 20

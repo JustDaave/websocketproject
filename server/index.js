@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
 const PORT = Number(process.env.PORT || 8080);
+const HOST_SECRET_CODE = String(process.env.HOST_SECRET_CODE || 'DAVE').trim().toUpperCase();
 const STARTING_CASH = 1500;
 const PASS_GO_BONUS = 200;
 const TURN_MS = 15000;
@@ -822,6 +823,15 @@ wss.on('connection', (socket) => {
     }
 
     if (message.type === 'create_room') {
+      const secretCode = String(message.secretCode || '')
+        .trim()
+        .toUpperCase();
+
+      if (secretCode !== HOST_SECRET_CODE) {
+        send(socket, 'error', { message: 'Invalid host access code.' });
+        return;
+      }
+
       const room = createRoom(socket);
       rooms.set(room.code, room);
       pushLog(room, 'Lobby created. Waiting for players.');

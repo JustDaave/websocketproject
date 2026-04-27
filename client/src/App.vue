@@ -9,6 +9,8 @@ const ROUTES = {
   controller: '/controller'
 };
 
+const HOST_SECRET_CODE = 'DAVE';
+
 const STORAGE_KEYS = {
   wsUrl: 'fast-pace-monopoly-ws-url',
   host: 'fast-pace-monopoly-host-session',
@@ -22,6 +24,8 @@ const room = ref(null);
 const playerId = ref('');
 const status = ref('Disconnected');
 const error = ref('');
+const hostAccessCode = ref('');
+const hostAccessError = ref('');
 const wsUrl = ref(loadWsUrl());
 const mode = ref(routeMode(window.location.pathname));
 
@@ -88,6 +92,32 @@ function writeSession(key, value) {
 
 function clearSession(key) {
   window.localStorage.removeItem(key);
+}
+
+function normalizedHostAccessCode() {
+  return hostAccessCode.value.trim().toUpperCase();
+}
+
+function hasValidHostAccessCode() {
+  return normalizedHostAccessCode() === HOST_SECRET_CODE;
+}
+
+function canResumeHostSession() {
+  const savedHost = readSession(STORAGE_KEYS.host);
+  return Boolean(savedHost?.code && savedHost?.hostToken);
+}
+
+function redirectHostToLanding(message) {
+  hostAccessError.value = message;
+  error.value = '';
+  status.value = 'Disconnected';
+  mode.value = 'landing';
+  closeSocket();
+  resetRoomState();
+
+  if (window.location.pathname !== ROUTES.landing) {
+    window.history.replaceState({}, '', ROUTES.landing);
+  }
 }
 
 function closeSocket() {
@@ -170,7 +200,7 @@ function connect(nextMode) {
         return;
       }
 
-      send({ type: 'create_room' }, connection);
+      send({ type: 'create_room', secretCode: normalizedHostAccessCode() }, connection);
       return;
     }
 
@@ -260,11 +290,26 @@ function navigate(path) {
 }
 
 function createHost() {
+  const normalizedCode = normalizedHostAccessCode();
+
+  if (!normalizedCode) {
+    hostAccessError.value = 'Enter the host access code to open the trading floor.';
+    return;
+  }
+
+  if (normalizedCode !== HOST_SECRET_CODE) {
+    hostAccessError.value = 'That host access code is not valid.';
+    return;
+  }
+
+  hostAccessError.value = '';
+  hostAccessCode.value = normalizedCode;
   clearSession(STORAGE_KEYS.host);
   navigate(ROUTES.host);
 }
 
 function connectController() {
+  hostAccessError.value = '';
   navigate(ROUTES.controller);
 }
 
@@ -282,6 +327,12 @@ function leaveSession() {
 
 function handlePopState() {
   const nextMode = routeMode(window.location.pathname);
+
+  if (nextMode === 'host' && !canResumeHostSession() && !hasValidHostAccessCode()) {
+    redirectHostToLanding('Enter the host access code before opening the trading floor.');
+    return;
+  }
+
   mode.value = nextMode;
 
   if (nextMode === 'landing') {
@@ -302,6 +353,10 @@ watch(wsUrl, (nextValue) => {
   window.localStorage.setItem(STORAGE_KEYS.wsUrl, nextValue);
 });
 
+watch(hostAccessCode, () => {
+  hostAccessError.value = '';
+});
+
 watchEffect(() => {
   const viewLabel =
     mode.value === 'host' ? 'Trading Floor' : mode.value === 'controller' ? 'Trader Console' : 'Market Lobby';
@@ -311,6 +366,11 @@ watchEffect(() => {
 
 onMounted(() => {
   window.addEventListener('popstate', handlePopState);
+
+  if (mode.value === 'host' && !canResumeHostSession() && !hasValidHostAccessCode()) {
+    redirectHostToLanding('Enter the host access code before opening the trading floor.');
+    return;
+  }
 
   if (mode.value !== 'landing') {
     connect(mode.value);
@@ -347,9 +407,25 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="actions">
+        <label class="host-code-field">
+          <span class="field-label">Host Access Code</span>
+          <input
+            v-model="hostAccessCode"
+            class="host-code-input"
+            type="password"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="Enter code"
+            @keydown.enter.prevent="createHost"
+          />
+        </label>
         <button class="primary" @click="createHost">Host Game</button>
         <button class="secondary" @click="connectController">Join Game</button>
       </div>
+
+      <p v-if="hostAccessError" class="host-access-error">{{ hostAccessError }}</p>
 
       <p class="market-note">
         Built for quick rounds, loud wins, and a room full of people trying to own the street.

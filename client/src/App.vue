@@ -108,7 +108,7 @@ function canResumeHostSession() {
 }
 
 function redirectHostToLanding(message) {
-  hostAccessError.value = message;
+  hostAccessError.value = message || '';
   error.value = '';
   status.value = 'Disconnected';
   mode.value = 'landing';
@@ -290,6 +290,13 @@ function navigate(path) {
 }
 
 function createHost() {
+  const requestedCode = window.prompt('Enter host access code');
+
+  if (requestedCode === null) {
+    return;
+  }
+
+  hostAccessCode.value = requestedCode;
   const normalizedCode = normalizedHostAccessCode();
 
   if (!normalizedCode) {
@@ -368,7 +375,7 @@ onMounted(() => {
   window.addEventListener('popstate', handlePopState);
 
   if (mode.value === 'host' && !canResumeHostSession() && !hasValidHostAccessCode()) {
-    redirectHostToLanding('Enter the host access code before opening the trading floor.');
+    redirectHostToLanding();
     return;
   }
 
@@ -407,20 +414,6 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="actions">
-        <label class="host-code-field">
-          <span class="field-label">Host Access Code</span>
-          <input
-            v-model="hostAccessCode"
-            class="host-code-input"
-            type="password"
-            inputmode="text"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            placeholder="Enter code"
-            @keydown.enter.prevent="createHost"
-          />
-        </label>
         <button class="primary" @click="createHost">Host Game</button>
         <button class="secondary" @click="connectController">Join Game</button>
       </div>

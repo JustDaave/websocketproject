@@ -304,11 +304,6 @@ onBeforeUnmount(() => {
         <span class="hero-kicker">Boardwalk Power Plays</span>
       </div>
 
-      <label class="field">
-        <span>Market feed WebSocket URL</span>
-        <input v-model="wsUrl" placeholder="ws://192.168.1.15:8080" />
-      </label>
-
       <div class="route-preview">
         <span class="route-pill">/host Trading Floor</span>
         <span class="route-pill">/controller Trader Desk</span>
